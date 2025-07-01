@@ -119,8 +119,8 @@ def main_dashboard():
 
     # --- SIDEBAR FOR CONTROLS ---
     with st.sidebar:
-        st.header("🚚 Actions")
-        if st.button("🔄 Load/Refresh Data from OneDrive"):
+        st.header("🚚 Actions & Settings")
+        if st.button("🔄 Load/Refresh Data"):
             load_data_from_onedrive(force_rerun=True)
 
         if st.session_state.last_load_time:
@@ -128,34 +128,33 @@ def main_dashboard():
         
         st.header("Self-Update")
         auto_refresh_enabled = st.toggle("Enable self-update", value=False)
-        refresh_interval = st.number_input("Refresh interval (seconds)", min_value=10, max_value=3600, value=60)
+        refresh_interval = st.number_input("Refresh interval (s)", min_value=10, max_value=3600, value=60)
         
         st.divider()
 
-        st.header("📊 Data Filters")
+        # --- NEW COLLAPSIBLE FILTER SECTION ---
+        with st.expander("📊 Data Filters", expanded=True):
+            # --- SMART DATE FILTER ---
+            if st.session_state.data is not None and not st.session_state.data.empty and 'Completion time' in st.session_state.data:
+                min_date = st.session_state.data['Completion time'].dropna().min().date()
+                max_date = st.session_state.data['Completion time'].dropna().max().date()
+            else:
+                min_date = datetime.date.today() - datetime.timedelta(days=30)
+                max_date = datetime.date.today()
 
-        # --- SMART DATE FILTER ---
-        if st.session_state.data is not None and not st.session_state.data.empty and 'Completion time' in st.session_state.data:
-            min_date = st.session_state.data['Completion time'].dropna().min().date()
-            max_date = st.session_state.data['Completion time'].dropna().max().date()
-        else:
-            min_date = datetime.date.today() - datetime.timedelta(days=30)
-            max_date = datetime.date.today()
+            start_date = st.date_input("Start Date", value=min_date, format="YYYY-MM-DD")
+            end_date = st.date_input("End Date", value=max_date, format="YYYY-MM-DD")
+            
+            if start_date > end_date:
+                st.error("Error: End date must be after start date.")
+            
+            # --- FILTERS WITH SELECTBOX (DROPDOWN) ---
+            if st.session_state.data is not None:
+                all_terminals = ['All'] + sorted(st.session_state.data['Ter.'].dropna().unique())
+                selected_terminal = st.selectbox("Filter by Terminal", options=all_terminals)
 
-        start_date = st.date_input("Start Date", value=min_date, format="YYYY-MM-DD")
-        end_date = st.date_input("End Date", value=max_date, format="YYYY-MM-DD")
-        
-        if start_date > end_date:
-            st.error("Error: End date must be after start date.")
-        
-        # --- SIMPLIFIED FILTERS ---
-        if st.session_state.data is not None:
-            st.divider()
-            all_terminals = sorted(st.session_state.data['Ter.'].dropna().unique())
-            selected_terminals = st.multiselect("Filter by Terminal", options=all_terminals, default=all_terminals)
-
-            all_ship_nos = sorted(st.session_state.data['Ship no.'].dropna().unique())
-            selected_ship_nos = st.multiselect("Filter by Ship no.", options=all_ship_nos, default=all_ship_nos)
+                all_ship_nos = ['All'] + sorted(st.session_state.data['Ship no.'].dropna().unique())
+                selected_ship_no = st.selectbox("Filter by Ship no.", options=all_ship_nos)
         
         st.divider()
 
@@ -169,7 +168,7 @@ def main_dashboard():
         load_data_from_onedrive()
 
     # --- STABLE SELF-UPDATE LOGIC ---
-    if auto_refresh_enabled:
+    if auto_refresh_enabled and not carousel_enabled:
         if datetime.datetime.now() >= st.session_state.next_update:
             load_data_from_onedrive()
             st.session_state.next_update = datetime.datetime.now() + datetime.timedelta(seconds=refresh_interval)
@@ -194,20 +193,22 @@ def main_dashboard():
             date_mask = (df['Completion time'] >= start_datetime) & (df['Completion time'] <= end_datetime)
             filtered_df = df.loc[date_mask].copy()
 
-            # Apply simplified filters
-            if 'selected_terminals' in locals():
-                filtered_df = filtered_df[filtered_df['Ter.'].isin(selected_terminals)]
-            if 'selected_ship_nos' in locals():
-                filtered_df = filtered_df[filtered_df['Ship no.'].isin(selected_ship_nos)]
+            # Apply single-select filters
+            if 'selected_terminal' in locals() and selected_terminal != 'All':
+                filtered_df = filtered_df[filtered_df['Ter.'] == selected_terminal]
+            if 'selected_ship_no' in locals() and selected_ship_no != 'All':
+                filtered_df = filtered_df[filtered_df['Ship no.'] == selected_ship_no]
             
             if filtered_df.empty:
                 st.info("No shipping data found for the selected filters.")
                 
             else:
                 # --- CAROUSEL LOGIC ---
-                carousel_items = sorted(filtered_df['Ter.'].dropna().unique())
+                # Create a combined list of items to cycle through: first terminals, then shipments.
+                terminal_views = [('Ter.', term) for term in sorted(filtered_df['Ter.'].dropna().unique())]
+                shipment_views = [('Ship no.', ship) for ship in sorted(filtered_df['Ship no.'].dropna().unique())]
+                carousel_items = terminal_views + shipment_views
                 
-                # --- SORTING REMOVED ---
                 display_df = filtered_df
                 metrics_df = filtered_df
                 metrics_header_text = "Key Metrics for Filtered Data"
@@ -216,14 +217,18 @@ def main_dashboard():
                     if st.session_state.carousel_index >= len(carousel_items):
                         st.session_state.carousel_index = 0
                     
-                    current_terminal = carousel_items[st.session_state.carousel_index]
+                    # Get the current item, which is a tuple like ('Ter.', 1.0) or ('Ship no.', 'GB12-02')
+                    current_item = carousel_items[st.session_state.carousel_index]
+                    filter_col, filter_val = current_item
 
-                    display_df = filtered_df[filtered_df['Ter.'] == current_terminal]
-                    metrics_df = display_df 
+                    # Filter the dataframe for display based on the current item
+                    display_df = filtered_df[filtered_df[filter_col] == filter_val]
+                    metrics_df = display_df # Metrics follow the displayed data
 
-                    display_val = int(current_terminal)
-                    st.markdown(f"<p class='big-header'>Shipment Details for: Ter. {display_val}</p>", unsafe_allow_html=True)
-                    metrics_header_text = f"Key Metrics for: Ter. {display_val}"
+                    # Update headers
+                    display_val = int(filter_val) if filter_col == 'Ter.' else filter_val
+                    st.markdown(f"<p class='big-header'>Shipment Details for: {filter_col} {display_val}</p>", unsafe_allow_html=True)
+                    metrics_header_text = f"Key Metrics for: {filter_col} {display_val}"
                 else:
                     st.markdown("<p class='big-header'>Shipment Details</p>", unsafe_allow_html=True)
 
