@@ -1,39 +1,32 @@
 # config.py
-import os
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
-
-
+import streamlit as st
 
 class Settings:
     """
-    Application configuration settings loaded from environment variables.
+    Application configuration settings loaded from Streamlit's secrets management.
     """
-    CLIENT_ID = os.getenv("CLIENT_ID")
-    CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-    TENANT_ID = os.getenv("TENANT_ID")
+    # Get secrets from st.secrets dictionary
+    CLIENT_ID = st.secrets.get("CLIENT_ID")
+    CLIENT_SECRET = st.secrets.get("CLIENT_SECRET")
+    TENANT_ID = st.secrets.get("TENANT_ID")
+    
+    # Construct the authority URL from the tenant ID
     AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
+    
+    # Define the required API scopes
     GRAPH_API_SCOPES = ["https://graph.microsoft.com/.default"]
-    EXCEL_SHEET_NAME = os.getenv("EXCEL_SHEET_NAME")
-    # OneDrive specific settings
-    ONEDRIVE_USER_ID = os.getenv("ONEDRIVE_USER_ID")
-    TARGET_FILE_PATH = os.getenv("TARGET_FILE_PATH")
-    ONEDRIVE_USER_ID = os.getenv("ONEDRIVE_USER_ID")
-# Create a single instance of the settings
+    
+    # Get OneDrive/SharePoint specific settings
+    ONEDRIVE_USER_ID = st.secrets.get("ONEDRIVE_USER_ID")
+    TARGET_FILE_PATH = st.secrets.get("TARGET_FILE_PATH")
+    EXCEL_SHEET_NAME = st.secrets.get("EXCEL_SHEET_NAME")
+
+# Create a single instance of the settings to be used throughout the app
 settings = Settings()
 
-# Validate that all required settings are present
-# NEW, CORRECTED CODE
-# Validate that all required settings from the .env file are present
-required_settings = [
-    settings.CLIENT_ID,
-    settings.CLIENT_SECRET,
-    settings.TENANT_ID,
-    settings.TARGET_FILE_PATH,
-    settings.EXCEL_SHEET_NAME 
-]
+# Optional: Add a check to ensure secrets are loaded when running on the cloud
+if not all([settings.CLIENT_ID, settings.CLIENT_SECRET, settings.TENANT_ID]):
+    # This message will show up in the logs on Streamlit Cloud if secrets are missing
+    st.error("Authentication secrets (CLIENT_ID, CLIENT_SECRET, TENANT_ID) are not set. Please add them to your Streamlit Cloud secrets.")
 
-if not all(required_settings):
-    raise ValueError("One or more required environment variables are missing. Please check your .env file.")
