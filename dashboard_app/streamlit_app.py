@@ -53,7 +53,7 @@ def format_status_display(status_value):
     status = str(status_value).strip()
     if status == 'On Process':
         return f"⏳ {status}"
-    elif status == 'Delay':
+    elif status == 'Delay(F)':
         return f"❗ {status}"
     elif status == 'Finished':
         return f"✅ {status}"
