@@ -169,7 +169,7 @@ def main_dashboard():
         load_data_from_onedrive()
 
     # --- STABLE SELF-UPDATE LOGIC ---
-    if auto_refresh_enabled and not carousel_enabled:
+    if auto_refresh_enabled:
         if datetime.datetime.now() >= st.session_state.next_update:
             load_data_from_onedrive()
             st.session_state.next_update = datetime.datetime.now() + datetime.timedelta(seconds=refresh_interval)
@@ -299,16 +299,11 @@ def main_dashboard():
     else:
         st.info("Click the 'Load/Refresh Data' button in the sidebar to start.")
 
-    # --- TIMING LOGIC (must be at the very end) ---
-    placeholder = st.empty()
-    while True:
-        if carousel_enabled and 'carousel_items' in locals() and carousel_items:
-            time.sleep(carousel_interval)
-            st.session_state.carousel_index = (st.session_state.carousel_index + 1) % len(carousel_items)
-            st.rerun()
-        elif auto_refresh_enabled:
-            time.sleep(refresh_interval)
-            st.rerun()
-        else:
-            # If nothing is enabled, break the loop to prevent unnecessary reruns
-            break
+    # --- STABLE TIMING LOGIC ---
+    if carousel_enabled and 'carousel_items' in locals() and carousel_items:
+        time.sleep(carousel_interval)
+        st.session_state.carousel_index = (st.session_state.carousel_index + 1) % len(carousel_items)
+        st.rerun()
+    elif auto_refresh_enabled:
+        time.sleep(refresh_interval)
+        st.rerun()
