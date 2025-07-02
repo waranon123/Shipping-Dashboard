@@ -13,8 +13,7 @@ from onedrive_api.errors import OneDriveError
 
 def get_status_style(status_text):
     """
-    Returns a background and text color based on the status.
-    Used for building the custom HTML table.
+    Returns a background and text color based on the status text from Excel.
     """
     status = str(status_text).strip()
     if 'Finished' in status:
@@ -25,21 +24,18 @@ def get_status_style(status_text):
         return 'background-color: #ffc107; color: black; font-weight: bold;'
     return 'background-color: white; color: black; font-weight: bold;' # Default style
 
-def format_time_display(value):
+def format_value_display(value):
     """
-    Helper function to format time values from Excel into HH:MM strings.
-    Returns '-' if the value is not a valid time. This version is more robust.
+    Helper function to format values for display.
+    - Shows integers for numbers like Ter. and Ship no.
+    - Shows a dash for blank cells.
+    - Shows other values as they are.
     """
     if pd.isna(value):
         return '-'
-    try:
-        # This will attempt to convert strings like '16:25' or '09:20:00 AM'
-        # and also handle existing datetime/time objects.
-        # The format string %H:%M ensures we only get hours and minutes.
-        return pd.to_datetime(str(value), errors='raise').strftime('%H:%M')
-    except (ValueError, TypeError):
-        # If any conversion fails, return a dash
-        return '-'
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
 
 def format_status_display(status_value):
@@ -102,8 +98,6 @@ def main_dashboard():
                 raw_df = loader.load_excel_from_onedrive()
                 cleaned_df = cleaning.clean_data(raw_df)
                 
-                # --- THIS IS THE FIX: Only convert the full datetime column needed for filtering ---
-                # This prevents the UserWarning. The other time columns are handled by the robust display function.
                 if 'Completion time' in cleaned_df.columns:
                     cleaned_df['Completion time'] = pd.to_datetime(cleaned_df['Completion time'], errors='coerce')
 
@@ -204,11 +198,9 @@ def main_dashboard():
                 
             else:
                 # --- CAROUSEL LOGIC ---
-                # Create a combined list of items to cycle through: first terminals, then shipments.
-                terminal_views = [('Ter.', term) for term in sorted(filtered_df['Ter.'].dropna().unique())]
-                shipment_views = [('Ship no.', ship) for ship in sorted(filtered_df['Ship no.'].dropna().unique())]
-                carousel_items = terminal_views + shipment_views
+                carousel_items = sorted(filtered_df['Ter.'].dropna().unique())
                 
+                # --- SORTING REMOVED ---
                 display_df = filtered_df
                 metrics_df = filtered_df
                 metrics_header_text = "Key Metrics for Filtered Data"
@@ -217,47 +209,43 @@ def main_dashboard():
                     if st.session_state.carousel_index >= len(carousel_items):
                         st.session_state.carousel_index = 0
                     
-                    # Get the current item, which is a tuple like ('Ter.', 1.0) or ('Ship no.', 'GB12-02')
-                    current_item = carousel_items[st.session_state.carousel_index]
-                    filter_col, filter_val = current_item
+                    current_terminal = carousel_items[st.session_state.carousel_index]
 
-                    # Filter the dataframe for display based on the current item
-                    display_df = filtered_df[filtered_df[filter_col] == filter_val]
-                    metrics_df = display_df # Metrics follow the displayed data
+                    display_df = filtered_df[filtered_df['Ter.'] == current_terminal]
+                    metrics_df = display_df 
 
-                    # Update headers
-                    display_val = int(filter_val) if filter_col == 'Ter.' else filter_val
-                    st.markdown(f"<p class='big-header'>Shipment Details for: {filter_col} {display_val}</p>", unsafe_allow_html=True)
-                    metrics_header_text = f"Key Metrics for: {filter_col} {display_val}"
+                    display_val = int(current_terminal)
+                    st.markdown(f"<p class='big-header'>Shipment Details for: Ter. {display_val}</p>", unsafe_allow_html=True)
+                    metrics_header_text = f"Key Metrics for: Ter. {display_val}"
                 else:
                     st.markdown("<p class='big-header'>Shipment Details</p>", unsafe_allow_html=True)
 
                 # --- BUILD CUSTOM HTML TABLE ---
                 html_table = """
-                <table style="width: 100%; border-collapse: collapse;">
+                <table style="width: 100%; border-collapse: collapse; border: 1px solid #ddd;">
                     <thead style="background-color: #F0F4FF; color: #1E3A8A;">
                         <tr>
-                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: left;">Ter.</th>
-                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: left;">Ship no.</th>
-                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: left;">Dock Code</th>
-                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: left;">Truck Route</th>
-                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: left;">Preparation Start</th>
-                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: left;">Preparation End</th>
-                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: left;">Loading Start</th>
-                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: left;">Loading End</th>
-                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: left;">Status Preparation</th>
-                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: left;">Status Loading</th>
+                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Ter.</th>
+                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Ship no.</th>
+                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Dock Code</th>
+                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Truck Route</th>
+                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Preparation Start</th>
+                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Preparation End</th>
+                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Loading Start</th>
+                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Loading End</th>
+                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Status Preparation</th>
+                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Status Loading</th>
                         </tr>
                     </thead>
                     <tbody>
                 """
                 for _, row in display_df.iterrows():
-                    ter_display = int(row['Ter.']) if pd.notna(row['Ter.']) else '-'
-                    ship_no_display = int(row['Ship no.']) if pd.notna(row['Ship no.']) else '-'
-                    prep_start_display = format_time_display(row['Preparation Start'])
-                    prep_end_display = format_time_display(row['Preparation End'])
-                    load_start_display = format_time_display(row['Loading Start'])
-                    load_end_display = format_time_display(row['Loading End'])
+                    ter_display = format_value_display(row['Ter.'])
+                    ship_no_display = format_value_display(row['Ship no.'])
+                    prep_start_display = format_value_display(row['Preparation Start'])
+                    prep_end_display = format_value_display(row['Preparation End'])
+                    load_start_display = format_value_display(row['Loading Start'])
+                    load_end_display = format_value_display(row['Loading End'])
                     
                     prep_status_text = format_status_display(row['Status Preparation'])
                     load_status_text = format_status_display(row['Status Loading'])
@@ -267,16 +255,16 @@ def main_dashboard():
                     
                     html_table += f"""
                     <tr style="border-bottom: 1px solid #ddd;">
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem;">{ter_display}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem;">{ship_no_display}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem;">{row['Dock Code']}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem;">{row['Truck Route']}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem;">{prep_start_display}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem;">{prep_end_display}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem;">{load_start_display}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem;">{load_end_display}</td>
-                        <td style="{prep_style}; font-size: 1rem; padding: 1rem;">{prep_status_text}</td>
-                        <td style="{load_style}; font-size: 1rem; padding: 1rem;">{load_status_text}</td>
+                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{ter_display}</td>
+                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{ship_no_display}</td>
+                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{format_value_display(row['Dock Code'])}</td>
+                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{format_value_display(row['Truck Route'])}</td>
+                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{prep_start_display}</td>
+                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{prep_end_display}</td>
+                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{load_start_display}</td>
+                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{load_end_display}</td>
+                        <td style="{prep_style}; font-size: 1rem; padding: 1rem; text-align: center; border: 1px solid #ddd;">{prep_status_text}</td>
+                        <td style="{load_style}; font-size: 1rem; padding: 1rem; text-align: center; border: 1px solid #ddd;">{load_status_text}</td>
                     </tr>
                     """
                 html_table += "</tbody></table>"
