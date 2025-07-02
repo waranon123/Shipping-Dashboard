@@ -198,7 +198,10 @@ def main_dashboard():
                 
             else:
                 # --- CAROUSEL LOGIC ---
-                carousel_items = sorted(filtered_df['Ter.'].dropna().unique())
+                # Create a combined list of items to cycle through: first terminals, then shipments.
+                terminal_views = [('Ter.', term) for term in sorted(filtered_df['Ter.'].dropna().unique())]
+                shipment_views = [('Ship no.', ship) for ship in sorted(filtered_df['Ship no.'].dropna().unique())]
+                carousel_items = terminal_views + shipment_views
                 
                 # --- SORTING REMOVED ---
                 display_df = filtered_df
@@ -209,14 +212,18 @@ def main_dashboard():
                     if st.session_state.carousel_index >= len(carousel_items):
                         st.session_state.carousel_index = 0
                     
-                    current_terminal = carousel_items[st.session_state.carousel_index]
+                    # Get the current item, which is a tuple like ('Ter.', 1.0) or ('Ship no.', 'GB12-02')
+                    current_item = carousel_items[st.session_state.carousel_index]
+                    filter_col, filter_val = current_item
 
-                    display_df = filtered_df[filtered_df['Ter.'] == current_terminal]
+                    # Filter the dataframe for display based on the current item
+                    display_df = filtered_df[filtered_df[filter_col] == filter_val]
                     metrics_df = display_df 
 
-                    display_val = int(current_terminal)
-                    st.markdown(f"<p class='big-header'>Shipment Details for: Ter. {display_val}</p>", unsafe_allow_html=True)
-                    metrics_header_text = f"Key Metrics for: Ter. {display_val}"
+                    # Update headers
+                    display_val = int(filter_val) if filter_col == 'Ter.' else filter_val
+                    st.markdown(f"<p class='big-header'>Shipment Details for: {filter_col} {display_val}</p>", unsafe_allow_html=True)
+                    metrics_header_text = f"Key Metrics for: {filter_col} {display_val}"
                 else:
                     st.markdown("<p class='big-header'>Shipment Details</p>", unsafe_allow_html=True)
 
