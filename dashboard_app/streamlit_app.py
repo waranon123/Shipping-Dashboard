@@ -24,6 +24,22 @@ def get_status_style(status_text):
         return 'background-color: #ffc107; color: black; font-weight: bold;'
     return 'background-color: white; color: black; font-weight: bold;' # Default style
 
+def format_time_display(value):
+    """
+    Helper function to format time values from Excel into HH:MM strings.
+    Returns '-' if the value is not a valid time. This version is more robust.
+    """
+    if pd.isna(value):
+        return '-'
+    try:
+        # This will attempt to convert strings like '16:25' or '09:20:00 AM'
+        # and also handle existing datetime/time objects.
+        # The format string %H:%M ensures we only get hours and minutes.
+        return pd.to_datetime(str(value), errors='raise').strftime('%H:%M')
+    except (ValueError, TypeError):
+        # If any conversion fails, return a dash
+        return '-'
+
 def format_value_display(value):
     """
     Helper function to format values for display.
@@ -90,14 +106,19 @@ def main_dashboard():
         st.session_state.carousel_index = 0
     if 'next_update' not in st.session_state:
         st.session_state.next_update = datetime.datetime.now()
+    if 'next_carousel_slide' not in st.session_state:
+        st.session_state.next_carousel_slide = datetime.datetime.now()
+
 
     # --- DATA LOADING FUNCTION ---
-    def load_data_from_onedrive(force_rerun=False):
+    def load_data_from_onedrive():
         with st.spinner("Connecting to OneDrive and fetching data..."):
             try:
                 raw_df = loader.load_excel_from_onedrive()
                 cleaned_df = cleaning.clean_data(raw_df)
                 
+                # --- THIS IS THE FIX: Only convert the full datetime column needed for filtering ---
+                # This prevents the UserWarning. The other time columns are handled by the robust display function.
                 if 'Completion time' in cleaned_df.columns:
                     cleaned_df['Completion time'] = pd.to_datetime(cleaned_df['Completion time'], errors='coerce')
 
@@ -108,20 +129,18 @@ def main_dashboard():
                 st.session_state.error = f"An error occurred: {e}"
                 st.session_state.data = None
         
-        if force_rerun:
-            st.rerun()
-
     # --- SIDEBAR FOR CONTROLS ---
     with st.sidebar:
         st.header("🚚 Actions & Settings")
         if st.button("🔄 Load/Refresh Data"):
-            load_data_from_onedrive(force_rerun=True)
+            load_data_from_onedrive()
+            st.rerun()
 
         if st.session_state.last_load_time:
             st.caption(f"Data last loaded: {st.session_state.last_load_time.strftime('%Y-%m-%d %H:%M:%S')}")
         
         st.header("Self-Update")
-        auto_refresh_enabled = st.toggle("Enable self-update", value=False)
+        # The toggle has been removed. Self-update is now always on.
         refresh_interval = st.number_input("Refresh interval (s)", min_value=10, max_value=3600, value=60)
         
         st.divider()
@@ -162,11 +181,11 @@ def main_dashboard():
         load_data_from_onedrive()
 
     # --- STABLE SELF-UPDATE LOGIC ---
-    if auto_refresh_enabled and not carousel_enabled:
-        if datetime.datetime.now() >= st.session_state.next_update:
-            load_data_from_onedrive()
-            st.session_state.next_update = datetime.datetime.now() + datetime.timedelta(seconds=refresh_interval)
-            st.rerun()
+    now = datetime.datetime.now()
+    if now >= st.session_state.next_update:
+        load_data_from_onedrive()
+        st.session_state.next_update = now + datetime.timedelta(seconds=refresh_interval)
+        st.rerun()
 
     # --- MAIN DASHBOARD DISPLAY ---
     if st.session_state.data is not None:
@@ -249,10 +268,10 @@ def main_dashboard():
                 for _, row in display_df.iterrows():
                     ter_display = format_value_display(row['Ter.'])
                     ship_no_display = format_value_display(row['Ship no.'])
-                    prep_start_display = format_value_display(row['Preparation Start'])
-                    prep_end_display = format_value_display(row['Preparation End'])
-                    load_start_display = format_value_display(row['Loading Start'])
-                    load_end_display = format_value_display(row['Loading End'])
+                    prep_start_display = format_time_display(row['Preparation Start'])
+                    prep_end_display = format_time_display(row['Preparation End'])
+                    load_start_display = format_time_display(row['Loading Start'])
+                    load_end_display = format_time_display(row['Loading End'])
                     
                     prep_status_text = format_status_display(row['Status Preparation'])
                     load_status_text = format_status_display(row['Status Loading'])
@@ -301,9 +320,11 @@ def main_dashboard():
 
     # --- STABLE TIMING LOGIC ---
     if carousel_enabled and 'carousel_items' in locals() and carousel_items:
-        time.sleep(carousel_interval)
-        st.session_state.carousel_index = (st.session_state.carousel_index + 1) % len(carousel_items)
-        st.rerun()
-    elif auto_refresh_enabled:
-        time.sleep(refresh_interval)
-        st.rerun()
+        if now >= st.session_state.next_carousel_slide:
+            st.session_state.carousel_index = (st.session_state.carousel_index + 1) % len(carousel_items)
+            st.session_state.next_carousel_slide = now + datetime.timedelta(seconds=carousel_interval)
+            st.rerun()
+    
+    # This keeps the app alive for the timers to work
+    time.sleep(1)
+    st.rerun()
