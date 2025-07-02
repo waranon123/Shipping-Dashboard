@@ -281,16 +281,16 @@ def main_dashboard():
                     
                     html_table += f"""
                     <tr style="border-bottom: 1px solid #ddd;">
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{ter_display}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{ship_no_display}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{format_value_display(row['Dock Code'])}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{format_value_display(row['Truck Route'])}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{prep_start_display}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{prep_end_display}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{load_start_display}</td>
-                        <td style="font-size: 1rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{load_end_display}</td>
-                        <td style="{prep_style}; font-size: 1rem; padding: 1rem; text-align: center; border: 1px solid #ddd;">{prep_status_text}</td>
-                        <td style="{load_style}; font-size: 1rem; padding: 1rem; text-align: center; border: 1px solid #ddd;">{load_status_text}</td>
+                        <td style="font-size: 1.5rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{ter_display}</td>
+                        <td style="font-size: 1.5rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{ship_no_display}</td>
+                        <td style="font-size: 1.5rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{format_value_display(row['Dock Code'])}</td>
+                        <td style="font-size: 1.5rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{format_value_display(row['Truck Route'])}</td>
+                        <td style="font-size: 1.5rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{prep_start_display}</td>
+                        <td style="font-size: 1.5rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{prep_end_display}</td>
+                        <td style="font-size: 1.5rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{load_start_display}</td>
+                        <td style="font-size: 1.5rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">{load_end_display}</td>
+                        <td style="{prep_style}; font-size: 1.5rem; padding: 1rem; text-align: center; border: 2px solid #ddd;">{prep_status_text}</td>
+                        <td style="{load_style}; font-size: 1.5rem; padding: 1rem; text-align: center; border: 1px solid #ddd;">{load_status_text}</td>
                     </tr>
                     """
                 html_table += "</tbody></table>"
