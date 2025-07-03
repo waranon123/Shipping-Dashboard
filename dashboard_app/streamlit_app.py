@@ -111,14 +111,12 @@ def main_dashboard():
 
 
     # --- DATA LOADING FUNCTION ---
-    def load_data_from_onedrive():
+    def load_data_from_onedrive(force_rerun=False):
         with st.spinner("Connecting to OneDrive and fetching data..."):
             try:
                 raw_df = loader.load_excel_from_onedrive()
                 cleaned_df = cleaning.clean_data(raw_df)
                 
-                # --- THIS IS THE FIX: Only convert the full datetime column needed for filtering ---
-                # This prevents the UserWarning. The other time columns are handled by the robust display function.
                 if 'Completion time' in cleaned_df.columns:
                     cleaned_df['Completion time'] = pd.to_datetime(cleaned_df['Completion time'], errors='coerce')
 
@@ -129,12 +127,14 @@ def main_dashboard():
                 st.session_state.error = f"An error occurred: {e}"
                 st.session_state.data = None
         
+        if force_rerun:
+            st.rerun()
+
     # --- SIDEBAR FOR CONTROLS ---
     with st.sidebar:
         st.header("🚚 Actions & Settings")
         if st.button("🔄 Load/Refresh Data"):
-            load_data_from_onedrive()
-            st.rerun()
+            load_data_from_onedrive(force_rerun=True)
 
         if st.session_state.last_load_time:
             st.caption(f"Data last loaded: {st.session_state.last_load_time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -175,6 +175,7 @@ def main_dashboard():
         carousel_enabled = st.toggle("Enable Carousel View", value=False)
         if carousel_enabled:
             carousel_interval = st.number_input("Carousel interval (seconds)", min_value=5, max_value=60, value=10)
+            rows_per_page = st.number_input("Rows per page", min_value=1, max_value=50, value=7)
 
     # --- Initial Data Load ---
     if st.session_state.data is None:
@@ -216,13 +217,24 @@ def main_dashboard():
                 st.info("No shipping data found for the selected filters.")
                 
             else:
-                # --- CAROUSEL LOGIC ---
-                # Create a combined list of items to cycle through: first terminals, then shipments.
-                terminal_views = [('Ter.', term) for term in sorted(filtered_df['Ter.'].dropna().unique())]
-                shipment_views = [('Ship no.', ship) for ship in sorted(filtered_df['Ship no.'].dropna().unique())]
-                carousel_items = terminal_views + shipment_views
-                
-                # --- SORTING REMOVED ---
+                # --- CAROUSEL LOGIC WITH PAGINATION ---
+                carousel_items = []
+                if carousel_enabled:
+                    # First, add paginated views for each terminal
+                    unique_terminals = sorted(filtered_df['Ter.'].dropna().unique())
+                    for terminal in unique_terminals:
+                        terminal_df = filtered_df[filtered_df['Ter.'] == terminal]
+                        num_shipments = len(terminal_df)
+                        num_pages = int(np.ceil(num_shipments / rows_per_page))
+                        for page in range(num_pages):
+                            carousel_items.append({'type': 'terminal', 'value': terminal, 'page': page})
+                    
+                    # Then, add views for each individual shipment number
+                    unique_shipments = sorted(filtered_df['Ship no.'].dropna().unique())
+                    for ship_no in unique_shipments:
+                        carousel_items.append({'type': 'shipment', 'value': ship_no, 'page': 0})
+
+
                 display_df = filtered_df
                 metrics_df = filtered_df
                 metrics_header_text = "Key Metrics for Filtered Data"
@@ -231,18 +243,30 @@ def main_dashboard():
                     if st.session_state.carousel_index >= len(carousel_items):
                         st.session_state.carousel_index = 0
                     
-                    # Get the current item, which is a tuple like ('Ter.', 1.0) or ('Ship no.', 'GB12-02')
                     current_item = carousel_items[st.session_state.carousel_index]
-                    filter_col, filter_val = current_item
+                    item_type = current_item['type']
+                    item_value = current_item['value']
+                    
+                    if item_type == 'terminal':
+                        current_page = current_item['page']
+                        terminal_df = filtered_df[filtered_df['Ter.'] == item_value]
+                        start_row = current_page * rows_per_page
+                        end_row = start_row + rows_per_page
+                        display_df = terminal_df.iloc[start_row:end_row]
+                        metrics_df = terminal_df
+                        
+                        display_val = int(item_value)
+                        total_pages = int(np.ceil(len(terminal_df) / rows_per_page))
+                        page_indicator = f" (Page {current_page + 1}/{total_pages})" if total_pages > 1 else ""
+                        st.markdown(f"<p class='big-header'>Shipment Details for: Ter. {display_val}{page_indicator}</p>", unsafe_allow_html=True)
+                        metrics_header_text = f"Key Metrics for: Ter. {display_val}"
+                    
+                    elif item_type == 'shipment':
+                        display_df = filtered_df[filtered_df['Ship no.'] == item_value]
+                        metrics_df = display_df
+                        st.markdown(f"<p class='big-header'>Shipment Details for: Ship no. {item_value}</p>", unsafe_allow_html=True)
+                        metrics_header_text = f"Key Metrics for: Ship no. {item_value}"
 
-                    # Filter the dataframe for display based on the current item
-                    display_df = filtered_df[filtered_df[filter_col] == filter_val]
-                    metrics_df = display_df 
-
-                    # Update headers
-                    display_val = int(filter_val) if filter_col == 'Ter.' else filter_val
-                    st.markdown(f"<p class='big-header'>Shipment Details for: {filter_col} {display_val}</p>", unsafe_allow_html=True)
-                    metrics_header_text = f"Key Metrics for: {filter_col} {display_val}"
                 else:
                     st.markdown("<p class='big-header'>Shipment Details</p>", unsafe_allow_html=True)
 
@@ -255,12 +279,12 @@ def main_dashboard():
                             <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Ship no.</th>
                             <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Dock Code</th>
                             <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Truck Route</th>
-                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Preparation Start</th>
-                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Preparation End</th>
+                            <th style="font-size: 1.8rem; font-weight: bold; padding: 0.2rem; text-align: center; border: 1px solid #ddd;">Preparation Start</th>
+                            <th style="font-size: 1.8rem; font-weight: bold; padding: 0.2rem; text-align: center; border: 1px solid #ddd;">Preparation End</th>
                             <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Loading Start</th>
                             <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Loading End</th>
                             <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Status Preparation</th>
-                            <th style="font-size: 1.8rem; font-weight: bold; padding: 1rem; text-align: center; border: 1px solid #ddd;">Status Loading</th>
+                            <th style="font-size: 1.8rem; font-weight: bold; padding: 2rem; text-align: center; border: 1px solid #ddd;">Status Loading</th>
                         </tr>
                     </thead>
                     <tbody>
